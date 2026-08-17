@@ -43,17 +43,18 @@
 
 ## การติดตั้ง
 
-ระบบติดตั้งไว้ให้เรียบร้อยแล้วที่ `D:\SignLanguageTranslator` **ข้ามหัวข้อนี้ไปได้เลย**
-(เก็บไว้เผื่อต้องย้ายเครื่องหรือติดตั้งใหม่)
-
-> **ข้อควรระวังเรื่องเวอร์ชัน Python**
-> MediaPipe รองรับถึง Python 3.12 เท่านั้น เครื่องนี้มี Python 3.14 เป็นตัวหลัก
-> จึงต้องสร้าง virtual environment จาก Python 3.12 โดยเฉพาะ
+ต้องมี `.venv` อยู่ในรากโปรเจค เพราะ `run.bat` เรียก `.venv\Scripts\python.exe` ตรง ๆ
 
 ```bat
-"%APPDATA%\uv\python\cpython-3.12.12-windows-x86_64-none\python.exe" -m venv .venv
+py -3 -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
+
+> **เรื่องเวอร์ชัน Python**
+> ทดสอบแล้วว่าใช้ได้ถึง Python 3.14 (mediapipe 0.10.35 แจกเป็น wheel แบบ
+> `py3-none-win_amd64` จึงติดตั้งได้ทุกรุ่นของ Python 3) เอกสารของ MediaPipe
+> เคยระบุว่ารองรับถึง 3.12 เท่านั้น ซึ่งไม่เป็นจริงกับรุ่นนี้แล้ว
+> ถ้าเจอปัญหาให้ลองสร้าง venv จาก Python 3.12 ด้วย `py -3.12 -m venv .venv`
 
 ตรวจว่าติดตั้งครบหรือยัง (ไม่ต้องใช้กล้อง):
 
