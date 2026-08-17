@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+
+# ไฟล์โมเดลตรวจจับมือ ดาวน์โหลดใหม่อัตโนมัติได้ ไม่ต้องเก็บลง git
+models/hand_landmarker.task
+
+# ผลลัพธ์ที่สร้างขึ้นระหว่างใช้งาน
+models/classifier.joblib
+data/landmarks.csv
+data/transcripts.txt
+data/camtest_snapshot.jpg
+docs/training_report.txt
