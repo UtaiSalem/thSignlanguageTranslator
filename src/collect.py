@@ -1,6 +1,6 @@
 """ขั้นตอนที่ 1 — เก็บข้อมูลท่ามือจากกล้อง
 
-รัน:  python -m src.collect
+รัน:  run collect
 
 ปุ่มควบคุม
     SPACE   เก็บ 1 ตัวอย่าง
@@ -178,7 +178,7 @@ def main() -> int:
     for label in labels:
         print(f"  {label:<12} {counts.get(label, 0)}")
     print(f"\nรวม {sum(counts.values())} ตัวอย่าง -> {config.DATASET_CSV}")
-    print("ขั้นตอนถัดไป: python -m src.train")
+    print("ขั้นตอนถัดไป: run train")
     return 0
 
 

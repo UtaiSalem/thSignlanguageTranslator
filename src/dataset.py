@@ -44,7 +44,7 @@ def load_dataset(csv_path: Path) -> tuple[np.ndarray, np.ndarray]:
     if not csv_path.exists():
         raise FileNotFoundError(
             f"ยังไม่มีไฟล์ข้อมูล {csv_path}\n"
-            f"ให้รัน `python -m src.collect` เพื่อเก็บข้อมูลจากกล้องก่อน"
+            f"ให้รัน `run collect` เพื่อเก็บข้อมูลจากกล้องก่อน"
         )
 
     if dataset_is_legacy(csv_path):

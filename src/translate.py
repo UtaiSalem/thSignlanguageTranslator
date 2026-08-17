@@ -1,6 +1,6 @@
 """ขั้นตอนที่ 3 — แปลภาษามือเป็นข้อความแบบเรียลไทม์
 
-รัน:  python -m src.translate
+รัน:  run translate
 
 ปุ่มควบคุม
     SPACE     เว้นวรรค (คั่นคำด้วยตัวเอง)
@@ -108,7 +108,7 @@ def load_classifier():
     if not config.CLASSIFIER_PATH.exists():
         raise FileNotFoundError(
             f"ยังไม่มีไฟล์โมเดล {config.CLASSIFIER_PATH}\n"
-            f"ให้เก็บข้อมูลด้วย `python -m src.collect` แล้วเทรนด้วย `python -m src.train` ก่อน"
+            f"ให้เก็บข้อมูลด้วย `run collect` แล้วเทรนด้วย `run train` ก่อน"
         )
     bundle = joblib.load(config.CLASSIFIER_PATH)
     # แปลงเป็น str ปกติ เพราะ scikit-learn คืนค่าเป็น numpy.str_ ซึ่งพาไปโผล่

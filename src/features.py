@@ -140,7 +140,7 @@ def build_canonical_feature_vector(hands, source_is_mirrored: bool) -> np.ndarra
     mirror_feature_vector เพียงครั้งเดียว
 
     ถ้าไม่แปลง ข้อมูลจากสองฝั่งจะลงช่องมือสลับข้างกันและ x กลับด้าน ใช้ร่วมกันไม่ได้
-    โดยไม่มี error ฟ้อง (ตรวจสอบด้วย `run parity` และ `python selftest.py`)
+    โดยไม่มี error ฟ้อง (ตรวจสอบด้วย `run parity` และ `run selftest`)
     """
     vector = build_feature_vector(hands)
     if source_is_mirrored:

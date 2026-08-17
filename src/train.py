@@ -1,8 +1,8 @@
 """ขั้นตอนที่ 2 — เทรนโมเดลจำแนกท่ามือ
 
-รัน:  python -m src.train
-      python -m src.train --model rf        (ลองใช้ Random Forest เทียบดู)
-      python -m src.train --no-augment      (ปิดการเพิ่มข้อมูลแบบกลับด้าน)
+รัน:  run train
+      run train --model rf        (ลองใช้ Random Forest เทียบดู)
+      run train --no-augment      (ปิดการเพิ่มข้อมูลแบบกลับด้าน)
 
 โมเดลที่ใช้เป็นโครงข่ายประสาทเทียมขนาดเล็ก (MLP) รับ input 128 ค่าจาก
 src/features.py ซึ่งเป็น "รูปทรงมือ" ที่ตัดผลของตำแหน่งและขนาดออกไปแล้ว
@@ -154,7 +154,7 @@ def main() -> int:
         print(f"  คำเตือน: {warning}")
 
     if len(labels) < 2:
-        print("\nต้องมีอย่างน้อย 2 คำถึงจะเทรนได้ — กลับไปเก็บข้อมูลเพิ่มด้วย python -m src.collect")
+        print("\nต้องมีอย่างน้อย 2 คำถึงจะเทรนได้ — กลับไปเก็บข้อมูลเพิ่มด้วย run collect")
         return 1
 
     # แบ่งข้อมูลก่อนเพิ่มข้อมูลเสมอ ไม่งั้นภาพกลับด้านของตัวอย่างเดียวกัน
@@ -204,7 +204,7 @@ def main() -> int:
         encoding="utf-8",
     )
     print(f"บันทึกรายงานแล้ว -> {config.REPORT_PATH}")
-    print("\nขั้นตอนถัดไป: python -m src.translate")
+    print("\nขั้นตอนถัดไป: run translate")
     return 0
 
 
