@@ -61,12 +61,21 @@ export class Camera {
   }
 
   async switchCamera() {
-    const next = this.facingMode === "user" ? "environment" : "user";
+    // ต้องจำค่าเดิมไว้ก่อน เพราะ start() ตั้ง this.facingMode เป็นค่าใหม่ตั้งแต่ต้น
+    // ถ้าไปอ่าน this.facingMode ในบล็อก catch จะได้ค่าใหม่ที่เพิ่งล้มเหลวไป
+    // แล้วกู้กลับไปกล้องตัวที่ใช้ไม่ได้ซ้ำอีกรอบ
+    const previous = this.facingMode;
+    const next = previous === "user" ? "environment" : "user";
+
     try {
       await this.start(next);
     } catch (error) {
       // มือถือบางรุ่นมีกล้องเดียว ให้กลับไปใช้ตัวเดิมแทนที่จะพังทั้งแอป
-      await this.start(this.facingMode === next ? "user" : this.facingMode);
+      try {
+        await this.start(previous);
+      } catch {
+        // กู้กลับไม่ได้ด้วย ปล่อยให้ผู้ใช้เห็นข้อความเดียวกันแล้วรีเฟรชหน้าเว็บเอง
+      }
       throw new Error("สลับกล้องไม่ได้ — เครื่องนี้อาจมีกล้องตัวเดียว");
     }
     return this.facingMode;

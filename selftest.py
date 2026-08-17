@@ -119,6 +119,66 @@ def main() -> int:
         assert mirrored[63] == 1.0 and mirrored[127] == 0.0, "สลับช่องซ้าย-ขวาไม่ถูก"
         return "สลับช่องและกลับแกน x ถูกต้อง"
 
+    @check("ท่อนคู่มือเก็บความสัมพันธ์ระหว่างสองมือได้")
+    def _():
+        from src.features import HANDS_DIMS, PAIR_START, build_feature_vector, mirror_feature_vector
+
+        def two_hands(separation: float):
+            """สองมือรูปทรงเดิมเป๊ะ ต่างกันแค่ระยะห่างระหว่างกัน"""
+            left = fake_landmarks(31) * 0.3 + np.array([0.10, 0.40, 0.0], dtype=np.float32)
+            right = fake_landmarks(32) * 0.3 + np.array([0.10 + separation, 0.40, 0.0], dtype=np.float32)
+            return [FakeHand(left, "Left"), FakeHand(right, "Right")]
+
+        near = build_feature_vector(two_hands(0.05))
+        far = build_feature_vector(two_hands(0.45))
+
+        # ท่อนของแต่ละมือมองไม่เห็นระยะห่าง — นี่คือข้อจำกัดที่ท่อนคู่มือมีไว้แก้
+        assert np.allclose(near[:HANDS_DIMS], far[:HANDS_DIMS], atol=1e-6)
+        assert not np.allclose(near, far, atol=1e-6), "มือประกบกับมือแยกห่างยังได้เวกเตอร์เดียวกัน"
+
+        # มือข้างเดียว: ไม่มีคู่ให้วัด ท่อนคู่มือต้องเป็นศูนย์ทั้งหมดรวมทั้งธง
+        one_hand = build_feature_vector([FakeHand(fake_landmarks(33), "Right")])
+        assert not one_hand[PAIR_START:].any(), "มือข้างเดียวแต่ท่อนคู่มือไม่เป็นศูนย์"
+
+        # กฎการกลับด้านของท่อนคู่มือกลับทางกับท่อนของแต่ละมือ (x คงเดิม y/z สลับ)
+        # ทดสอบโดยเทียบกับการพลิกภาพจริง ๆ ไม่ใช่เทียบกับสูตรที่เขียนไว้เอง
+        raw = two_hands(0.35)
+        swap = {"Left": "Right", "Right": "Left"}
+        flipped_hands = []
+        for hand in raw:
+            points = hand.landmarks.copy()
+            points[:, 0] = np.float32(1.0) - points[:, 0]
+            flipped_hands.append(FakeHand(points, swap[hand.handedness]))
+
+        from_image = build_feature_vector(flipped_hands)
+        from_rule = mirror_feature_vector(build_feature_vector(raw))
+        assert np.allclose(from_image, from_rule, atol=1e-5), (
+            "สูตรกลับด้านไม่ตรงกับการพลิกภาพจริง ท่อนคู่มืออาจสลับเครื่องหมายผิด"
+        )
+        return "แยกมือประกบจากมือแยกห่างได้ และกฎกลับด้านตรงกับการพลิกภาพจริง"
+
+    @check("คอนเวนชันมือซ้าย-ขวาของคอมพิวเตอร์กับมือถือตรงกัน")
+    def _():
+        from src.features import build_canonical_feature_vector, build_feature_vector
+
+        points = fake_landmarks(11)
+
+        # ฝั่งมือถือ: ส่งภาพดิบเข้า MediaPipe -> ได้คอนเวนชันกลางตรง ๆ
+        mobile = build_feature_vector([FakeHand(points, "Right")])
+
+        # ฝั่งคอมพิวเตอร์: พลิกเฟรมก่อนตรวจจับ MediaPipe จึงเห็น x กลับด้าน
+        # และเรียกมือขวาจริงว่า "Left" — จำลองสองอย่างนั้นแล้วแปลงกลับ
+        flipped = points.copy()
+        flipped[:, 0] = np.float32(1.0) - flipped[:, 0]
+        desktop = build_canonical_feature_vector([FakeHand(flipped, "Left")], True)
+
+        assert np.allclose(desktop, mobile, atol=1e-5), (
+            "ท่ามือเดียวกันแต่สองฝั่งได้เวกเตอร์ไม่เท่ากัน "
+            "ข้อมูลจะใช้ร่วมกันไม่ได้ (ดู build_canonical_feature_vector)"
+        )
+        assert desktop[127] == 1.0 and desktop[63] == 0.0, "มือขวาจริงไม่ได้ลงช่อง Right"
+        return "ท่าเดียวกันได้เวกเตอร์เดียวกันทั้งสองเส้นทาง"
+
     @check("วาดข้อความภาษาไทยลงบนภาพได้")
     def _():
         from src import thai_text
@@ -131,14 +191,14 @@ def main() -> int:
     @check("เขียนและอ่านไฟล์ชุดข้อมูล CSV")
     def _():
         from src import dataset
-        from src.features import build_feature_vector
+        from src.features import FEATURE_DIMS, build_feature_vector
         tmp = Path(tempfile.mkdtemp()) / "test.csv"
         try:
             for i in range(6):
                 vector = build_feature_vector([FakeHand(fake_landmarks(i % 3), "Right")])
                 dataset.append_sample(tmp, f"คำที่{i % 3}", vector)
             X, y = dataset.load_dataset(tmp)
-            assert X.shape == (6, 128) and len(set(y)) == 3
+            assert X.shape == (6, FEATURE_DIMS) and len(set(y)) == 3
             assert dataset.count_samples(tmp)["คำที่0"] == 2
             assert dataset.drop_last_sample(tmp, "คำที่0") is True
             assert dataset.count_samples(tmp)["คำที่0"] == 1

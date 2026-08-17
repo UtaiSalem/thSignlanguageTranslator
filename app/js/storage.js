@@ -8,8 +8,11 @@
  * และเก็บได้เฉพาะข้อความ ส่วนชุดข้อมูลของเราเป็นตัวเลขหลักแสนค่า
  */
 
+import { FEATURE_DIMS, LEGACY_FEATURE_DIMS, upgradeLegacyVector } from "./features.js";
+
 const DB_NAME = "sign-language-translator";
-const DB_VERSION = 1;
+// รุ่น 2 = ขยายเวกเตอร์ที่เก็บไว้จาก 128 เป็น 133 ค่า (เพิ่มท่อนคู่มือ)
+const DB_VERSION = 2;
 const STORE_SAMPLES = "samples";
 const STORE_META = "meta";
 
@@ -33,6 +36,11 @@ function openDatabase() {
       if (!db.objectStoreNames.contains(STORE_META)) {
         db.createObjectStore(STORE_META, { keyPath: "key" });
       }
+
+      // ผู้ใช้ที่ติดตั้งแอปไว้ก่อนหน้ามีข้อมูลรุ่น 128 ค่าอยู่ในเครื่อง ต้องขยาย
+      // ให้ครบ 133 ค่า ไม่งั้นเทรนไม่ได้ ทำใน transaction ของการอัปเกรดฐานข้อมูล
+      // เพื่อให้เกิดครั้งเดียวและเสร็จก่อนที่โค้ดส่วนอื่นจะอ่านข้อมูลได้
+      if (event.oldVersion >= 1) upgradeStoredVectors(event.target.transaction);
     };
 
     request.onsuccess = () => resolve(request.result);
@@ -40,6 +48,28 @@ function openDatabase() {
   });
 
   return dbPromise;
+}
+
+/** ขยายเวกเตอร์ที่เก็บไว้ทุกรายการให้ครบจำนวนมิติปัจจุบัน */
+function upgradeStoredVectors(transaction) {
+  const store = transaction.objectStore(STORE_SAMPLES);
+  const request = store.openCursor();
+  let upgraded = 0;
+
+  request.onsuccess = () => {
+    const cursor = request.result;
+    if (!cursor) {
+      if (upgraded) console.info(`ขยายเวกเตอร์ที่เก็บไว้ ${upgraded} รายการเป็น ${FEATURE_DIMS} ค่า`);
+      return;
+    }
+    const record = cursor.value;
+    if (Array.isArray(record.vector) && record.vector.length === LEGACY_FEATURE_DIMS) {
+      record.vector = Array.from(upgradeLegacyVector(record.vector));
+      cursor.update(record);
+      upgraded++;
+    }
+    cursor.continue();
+  };
 }
 
 function runTransaction(storeName, mode, callback) {
@@ -55,7 +85,7 @@ function runTransaction(storeName, mode, callback) {
           reject(error);
           return;
         }
-        transaction.oncomplete = () => resolve(result && result.__request ? result.__request.result : result);
+        transaction.oncomplete = () => resolve(result);
         transaction.onerror = () => reject(transaction.error);
         transaction.onabort = () => reject(transaction.error);
       })

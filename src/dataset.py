@@ -12,7 +12,19 @@ from pathlib import Path
 
 import numpy as np
 
-from .features import FEATURE_DIMS, feature_column_names
+from .features import FEATURE_DIMS, LEGACY_FEATURE_DIMS, feature_column_names
+
+
+def dataset_is_legacy(csv_path: Path) -> bool:
+    """เดาจากหัวตารางว่าไฟล์นี้เป็นชุดข้อมูลรุ่นก่อนมีท่อนคู่มือหรือไม่
+
+    ดูจากจำนวนคอลัมน์ ไม่ได้ดูจากเลขรุ่นเพราะไฟล์ CSV ไม่ได้บันทึกเลขรุ่นไว้
+    """
+    if not csv_path.exists():
+        return False
+    with csv_path.open("r", newline="", encoding="utf-8") as fh:
+        header = next(csv.reader(fh), [])
+    return len(header) == 1 + LEGACY_FEATURE_DIMS and "Pair_present" not in header
 
 
 def append_sample(csv_path: Path, label: str, vector: np.ndarray) -> None:
@@ -33,6 +45,14 @@ def load_dataset(csv_path: Path) -> tuple[np.ndarray, np.ndarray]:
         raise FileNotFoundError(
             f"ยังไม่มีไฟล์ข้อมูล {csv_path}\n"
             f"ให้รัน `python -m src.collect` เพื่อเก็บข้อมูลจากกล้องก่อน"
+        )
+
+    if dataset_is_legacy(csv_path):
+        raise ValueError(
+            f"ไฟล์ {csv_path} เป็นชุดข้อมูลรุ่นเก่า ({LEGACY_FEATURE_DIMS} มิติ "
+            f"ตอนนี้ใช้ {FEATURE_DIMS} มิติ)\n"
+            f"แปลงให้ทันสมัยก่อนด้วย `run transfer convert-legacy` "
+            f"(คำสั่งนี้สำรองไฟล์เดิมให้อัตโนมัติ)"
         )
 
     labels: list[str] = []
@@ -71,13 +91,16 @@ def drop_last_sample(csv_path: Path, label: str) -> bool:
         return False
 
     with csv_path.open("r", newline="", encoding="utf-8") as fh:
-        lines = fh.readlines()
+        rows = list(csv.reader(fh))
 
-    for index in range(len(lines) - 1, 0, -1):   # ข้ามบรรทัดหัวตาราง
-        if lines[index].startswith(f"{label},"):
-            del lines[index]
+    # ต้องแกะแถวด้วย csv.reader แล้วเทียบช่องแรก ไม่ใช่เทียบว่าบรรทัดขึ้นต้นด้วย
+    # "ชื่อคำ," เพราะคำที่มีลูกน้ำหรือเครื่องหมายคำพูดจะถูก CSV ครอบ quote ไว้
+    # (เช่น "ก,ข") การเทียบสตริงตรง ๆ จะหาไม่เจอแล้วบอกว่าไม่มีตัวอย่างให้ลบ
+    for index in range(len(rows) - 1, 0, -1):   # ข้ามแถวหัวตาราง
+        if rows[index] and rows[index][0] == label:
+            del rows[index]
             with csv_path.open("w", newline="", encoding="utf-8") as fh:
-                fh.writelines(lines)
+                csv.writer(fh).writerows(rows)
             return True
 
     return False

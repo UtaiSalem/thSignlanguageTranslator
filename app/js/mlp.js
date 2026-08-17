@@ -210,6 +210,9 @@ export class Classifier {
   /**
    * เทรนโมเดล — เป็น generator เพื่อให้หน้าจอไม่ค้าง
    * เรียกใช้แบบ: for (const progress of model.trainSteps(...)) { await yieldToUI(); }
+   *
+   * ส่งข้อมูล **ดิบ** เข้ามา แล้วบอกวิธีเพิ่มข้อมูลผ่าน options.augment
+   * (อย่าเพิ่มข้อมูลมาก่อนแล้วส่งเข้ามา — เหตุผลอยู่ที่คอมเมนต์ตรงจุดที่แบ่งชุดข้อมูล)
    */
   *trainSteps(X, y, options = {}) {
     const {
@@ -219,9 +222,14 @@ export class Classifier {
       validationSplit = 0.2,
       patience = 20,
       seed = 42,
+      augment = null,
     } = options;
 
-    this._fitScaler(X);
+    // ต้องมีอย่างน้อย 2 ตัวอย่าง ไม่งั้นแบ่งชุดตรวจสอบแล้วชุดเทรนจะว่าง
+    // ซึ่งทำให้ตัวปรับสเกลหารด้วยศูนย์ กลายเป็น NaN ทั้งโมเดลแบบไม่มี error ฟ้อง
+    if (X.length < 2) {
+      throw new Error("ต้องมีอย่างน้อย 2 ตัวอย่างถึงจะเทรนได้");
+    }
 
     const random = makeRandom(seed);
     const indices = Array.from({ length: X.length }, (_, i) => i);
@@ -230,10 +238,42 @@ export class Classifier {
       [indices[i], indices[j]] = [indices[j], indices[i]];
     }
 
-    const validationCount = Math.max(1, Math.floor(X.length * validationSplit));
-    const validationIndices = indices.slice(0, validationCount);
-    const trainIndices = indices.slice(validationCount);
+    // กันไว้ทั้งสองด้าน: ชุดตรวจสอบต้องมีอย่างน้อย 1 ตัวอย่าง (ไม่งั้นคำนวณ
+    // ความแม่นยำเป็น 0/0) และต้องเหลือให้ชุดเทรนอย่างน้อย 1 ตัวอย่างด้วย
+    const validationCount = Math.min(
+      Math.max(1, Math.floor(X.length * validationSplit)),
+      X.length - 1
+    );
+    const validationX = [];
+    const validationY = [];
+    for (const index of indices.slice(0, validationCount)) {
+      validationX.push(X[index]);
+      validationY.push(y[index]);
+    }
 
+    const trainX = [];
+    const trainY = [];
+    for (const index of indices.slice(validationCount)) {
+      trainX.push(X[index]);
+      trainY.push(y[index]);
+    }
+
+    // เพิ่มข้อมูล **หลัง** แบ่งชุดตรวจสอบออกไปแล้วเท่านั้น ไม่งั้นภาพกลับด้าน
+    // ของตัวอย่างเดียวกันจะไปโผล่ทั้งในชุดเทรนและชุดตรวจสอบ ความแม่นยำที่รายงาน
+    // จะสูงเกินจริง (data leakage) — ฝั่งคอมพิวเตอร์ระวังเรื่องนี้ที่ src/train.py
+    if (augment) {
+      const originalCount = trainX.length;
+      for (let i = 0; i < originalCount; i++) {
+        trainX.push(augment(trainX[i]));
+        trainY.push(trainY[i]);
+      }
+    }
+
+    // ปรับสเกลจากชุดเทรนเท่านั้น ค่าเฉลี่ยและส่วนเบี่ยงเบนของชุดตรวจสอบ
+    // ต้องไม่รั่วเข้ามา ด้วยเหตุผลเดียวกับข้างบน
+    this._fitScaler(trainX);
+
+    const trainIndices = Array.from({ length: trainX.length }, (_, i) => i);
     const gradHidden = new Float32Array(this.hiddenDim);
     const gradLogits = new Float32Array(this.labels.length);
     let step = 0;
@@ -252,8 +292,8 @@ export class Classifier {
         const batch = trainIndices.slice(start, start + batchSize);
 
         for (const index of batch) {
-          const { scaled, probs } = this._forward(X[index]);
-          const target = y[index];
+          const { scaled, probs } = this._forward(trainX[index]);
+          const target = trainY[index];
           lossSum -= Math.log(Math.max(probs[target], EPS));
 
           // อนุพันธ์ของ cross-entropy รวมกับ softmax ย่อเหลือ (p - onehot)
@@ -273,13 +313,13 @@ export class Classifier {
       }
 
       let correct = 0;
-      for (const index of validationIndices) {
-        const { probs } = this._forward(X[index]);
+      for (let i = 0; i < validationX.length; i++) {
+        const { probs } = this._forward(validationX[i]);
         let best = 0;
         for (let k = 1; k < probs.length; k++) if (probs[k] > probs[best]) best = k;
-        if (best === y[index]) correct++;
+        if (best === validationY[i]) correct++;
       }
-      const accuracy = correct / validationIndices.length;
+      const accuracy = correct / validationX.length;
 
       if (accuracy > bestAccuracy) {
         bestAccuracy = accuracy;

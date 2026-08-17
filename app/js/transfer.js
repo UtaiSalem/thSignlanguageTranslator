@@ -5,14 +5,29 @@
  * ฝั่งคอมพิวเตอร์แปลงไป-กลับกับไฟล์ CSV ด้วย `run transfer` (ดู src/transfer.py)
  *
  * สิ่งที่แชร์กันคือ **ชุดข้อมูล** ไม่ใช่ตัวโมเดล เพราะสองฝั่งใช้คนละไลบรารี
- * แต่ feature vector 128 ค่าเหมือนกันทุกประการ (ตรวจสอบด้วย `run parity`)
+ * แต่ feature vector 133 ค่าเหมือนกันทุกประการ (ตรวจสอบด้วย `run parity`)
  * แต่ละฝั่งจึงเทรนโมเดลของตัวเองจากข้อมูลชุดเดียวกันได้
  */
 
-import { FEATURE_DIMS } from "./features.js";
+import {
+  FEATURE_DIMS,
+  LEGACY_FEATURE_DIMS,
+  mirrorFeatureVector,
+  upgradeLegacyVector,
+} from "./features.js";
 
 export const DATASET_FORMAT = "sign-language-translator-dataset";
-export const DATASET_VERSION = 1;
+export const DATASET_VERSION = 3;
+
+/**
+ * ไฟล์รุ่นเก่ายังนำเข้าได้ แต่ต้องแปลงก่อน มีสองเรื่องที่ต่างกันและเป็นอิสระจากกัน
+ *
+ *   รุ่น 1 — 128 มิติ และฝั่งคอมพิวเตอร์ยังเก็บในคอนเวนชันภาพกระจก
+ *   รุ่น 2 — 128 มิติ คอนเวนชันมือตรงกันแล้ว แต่ยังไม่มีท่อนคู่มือ
+ *   รุ่น 3 — 133 มิติ มีท่อนคู่มือ (ดู features.js)
+ */
+export const LEGACY_VERSIONS = [1, 2];
+export const MIRRORED_CONVENTION_VERSION = 1;
 
 /** สร้างเนื้อหาไฟล์ JSON จากตัวอย่างทั้งหมด */
 export function buildExport(samples) {
@@ -60,9 +75,17 @@ export function parseImport(text) {
     throw new Error("ไม่ใช่ไฟล์ชุดข้อมูลของแอปนี้");
   }
 
-  if (data.featureDims !== FEATURE_DIMS) {
+  const isLegacy = LEGACY_VERSIONS.includes(data.version);
+  if (!isLegacy && data.version !== DATASET_VERSION) {
     throw new Error(
-      `จำนวนมิติของข้อมูลไม่ตรงกัน (ไฟล์มี ${data.featureDims} แอปต้องการ ${FEATURE_DIMS})`
+      `ไฟล์นี้เป็นรุ่น ${data.version} ซึ่งแอปรุ่นนี้อ่านไม่ได้ (อ่านได้ถึงรุ่น ${DATASET_VERSION})`
+    );
+  }
+
+  const expectedDims = isLegacy ? LEGACY_FEATURE_DIMS : FEATURE_DIMS;
+  if (data.featureDims !== expectedDims) {
+    throw new Error(
+      `จำนวนมิติของข้อมูลไม่ตรงกัน (ไฟล์รุ่น ${data.version} มี ${data.featureDims} ควรเป็น ${expectedDims})`
     );
   }
 
@@ -70,18 +93,32 @@ export function parseImport(text) {
     throw new Error("ไฟล์นี้ไม่มีข้อมูลตัวอย่างอยู่เลย");
   }
 
+  const source = data.source || "unknown";
+
+  // ไฟล์รุ่น 1 จากคอมพิวเตอร์อยู่ในคอนเวนชันภาพกระจก ต้องสลับก่อนเอามาปนกับข้อมูลใหม่
+  const needsMirror = data.version === MIRRORED_CONVENTION_VERSION && source === "desktop";
+
   const samples = [];
   for (const [index, sample] of data.samples.entries()) {
     if (typeof sample.label !== "string" || !sample.label) {
       throw new Error(`ตัวอย่างลำดับที่ ${index + 1} ไม่มีชื่อคำกำกับ`);
     }
-    if (!Array.isArray(sample.vector) || sample.vector.length !== FEATURE_DIMS) {
-      throw new Error(`ตัวอย่างลำดับที่ ${index + 1} มีจำนวนค่าไม่ครบ ${FEATURE_DIMS}`);
+    if (!Array.isArray(sample.vector) || sample.vector.length !== expectedDims) {
+      throw new Error(`ตัวอย่างลำดับที่ ${index + 1} มีจำนวนค่าไม่ครบ ${expectedDims}`);
     }
-    samples.push({ label: sample.label, vector: Float32Array.from(sample.vector) });
+    let vector = Float32Array.from(sample.vector);
+    if (isLegacy) vector = upgradeLegacyVector(vector);
+    if (needsMirror) vector = mirrorFeatureVector(vector);
+    samples.push({ label: sample.label, vector });
   }
 
-  return { samples, source: data.source || "unknown", exportedAt: data.exportedAt };
+  return {
+    samples,
+    source,
+    exportedAt: data.exportedAt,
+    converted: isLegacy,
+    mirrored: needsMirror,
+  };
 }
 
 /** เปิดหน้าต่างเลือกไฟล์แล้วคืนเนื้อหาเป็นข้อความ */

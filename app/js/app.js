@@ -26,6 +26,7 @@ const state = {
   burst: false,
   lastBurstAt: 0,
   currentLabel: "",
+  lastHands: [],      // ผลตรวจจับของเฟรมล่าสุด ใช้ตอนกดปุ่มเก็บตัวอย่าง
   counts: new Map(),
   flashUntil: 0,
   frameTimes: [],
@@ -113,6 +114,7 @@ function loop() {
     console.error("ตรวจจับมือผิดพลาด", error);
     return;
   }
+  state.lastHands = hands;
 
   drawOverlay(hands);
 
@@ -240,11 +242,6 @@ async function trainModel() {
   const X = samples.map((s) => Float32Array.from(s.vector));
   const y = samples.map((s) => labelIndex.get(s.label));
 
-  // เพิ่มข้อมูลแบบกลับด้านซ้าย-ขวา ทำให้โมเดลไม่ยึดติดว่าต้องใช้มือข้างไหน
-  // และรองรับกรณีเก็บข้อมูลด้วยกล้องหน้า (ภาพกระจก) แต่ไปใช้งานด้วยกล้องหลัง
-  const augmentedX = [...X, ...X.map(mirrorFeatureVector)];
-  const augmentedY = [...y, ...y];
-
   const panel = $("trainProgress");
   panel.hidden = false;
   $("trainButton").disabled = true;
@@ -253,7 +250,13 @@ async function trainModel() {
   const startedAt = Date.now();
   let lastYield = startedAt;
 
-  for (const progress of model.trainSteps(augmentedX, augmentedY, { epochs: 150, patience: 25 })) {
+  // ส่งข้อมูลดิบเข้าไป แล้วให้ trainSteps เพิ่มข้อมูลแบบกลับด้านซ้าย-ขวาเองหลังแบ่ง
+  // ชุดตรวจสอบแล้ว (ถ้าเพิ่มมาก่อน ความแม่นยำที่รายงานจะสูงเกินจริง)
+  // การเพิ่มข้อมูลนี้ทำให้โมเดลไม่ยึดติดว่าต้องใช้มือข้างไหน และรองรับกรณี
+  // เก็บข้อมูลด้วยกล้องหน้าแต่ไปใช้งานด้วยกล้องหลัง
+  const trainOptions = { epochs: 150, patience: 25, augment: mirrorFeatureVector };
+
+  for (const progress of model.trainSteps(X, y, trainOptions)) {
     $("trainBar").style.width = `${(progress.epoch / progress.epochs) * 100}%`;
     $("trainStat").textContent =
       `รอบที่ ${progress.epoch}/${progress.epochs} · ` +
@@ -471,7 +474,8 @@ async function importDataset() {
   }
 
   await storage.addSamples(parsed.samples);
-  toast(`นำเข้า ${parsed.samples.length} ตัวอย่างแล้ว`, "ok");
+  const note = parsed.converted ? " (แปลงจากไฟล์รุ่นเก่าให้แล้ว)" : "";
+  toast(`นำเข้า ${parsed.samples.length} ตัวอย่างแล้ว${note}`, "ok");
   renderLabelList();
 }
 
@@ -515,6 +519,7 @@ function bindSettings() {
 
 async function main() {
   const settingsUI = bindSettings();
+  let pendingNotice = null;
 
   // โหลดการตั้งค่าที่เคยบันทึกไว้
   const savedSettings = await storage.getMeta("settings", DEFAULT_SETTINGS);
@@ -527,10 +532,18 @@ async function main() {
   // โหลดโมเดลที่เคยเทรนไว้
   const savedModel = await storage.getMeta("model");
   if (savedModel) {
-    try {
-      state.model = Classifier.fromJSON(savedModel);
-    } catch (error) {
-      console.error("โหลดโมเดลที่บันทึกไว้ไม่สำเร็จ", error);
+    // โมเดลที่เทรนไว้ก่อนเพิ่มท่อนคู่มือรับ input คนละขนาด ถ้าปล่อยให้โหลดต่อ
+    // มันจะอ่านแค่ 128 ค่าแรกแล้วทายต่อได้เงียบ ๆ ซึ่งซ่อนปัญหาไว้ ทิ้งแล้วบอกให้เทรนใหม่
+    if (savedModel.inputDim !== FEATURE_DIMS) {
+      await storage.setMeta("model", null);
+      // เก็บข้อความไว้แสดงหลังหน้าจอโหลดหายไป ไม่งั้นผู้ใช้จะไม่ได้เห็น
+      pendingNotice = { text: "โมเดลเดิมใช้กับข้อมูลรุ่นใหม่ไม่ได้ — กดเทรนใหม่ที่แท็บเทรน", kind: "warn" };
+    } else {
+      try {
+        state.model = Classifier.fromJSON(savedModel);
+      } catch (error) {
+        console.error("โหลดโมเดลที่บันทึกไว้ไม่สำเร็จ", error);
+      }
     }
   }
   renderModelInfo();
@@ -559,6 +572,8 @@ async function main() {
   $("app").hidden = false;
 
   await setMode("collect");
+
+  if (pendingNotice) toast(pendingNotice.text, pendingNotice.kind);
 }
 
 /* ------------------------------------------------------------ ผูกปุ่มต่าง ๆ */
@@ -573,8 +588,9 @@ function bindControls() {
   };
 
   $("captureButton").onclick = async () => {
-    const hands = state.tracker.detect($("video"), performance.now());
-    await captureSample(hands);
+    // ใช้ผลตรวจจับของเฟรมล่าสุดที่ลูปทำไว้แล้ว การเรียก detect() ซ้ำตรงนี้
+    // คือการประมวลผลเฟรมเดิมสองรอบ ซึ่งเปลืองแรงเครื่องเปล่า ๆ บนมือถือ
+    await captureSample(state.lastHands);
   };
 
   $("burstButton").onclick = (event) => {

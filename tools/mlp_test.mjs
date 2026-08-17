@@ -67,15 +67,16 @@ console.log("ทดสอบโมเดล MLP ฝั่ง JavaScript");
 console.log("=".repeat(62));
 console.log(`\nชุดข้อมูลจำลอง: ${X.length} ตัวอย่าง, ${FEATURE_DIMS} มิติ, ${labels.length} คำ`);
 
-const augmentedX = [...X, ...X.map(mirrorFeatureVector)];
-const augmentedY = [...y, ...y];
-console.log(`หลังเพิ่มข้อมูลแบบกลับด้าน: ${augmentedX.length} ตัวอย่าง\n`);
+// ส่งข้อมูลดิบเข้าไป แล้วให้ trainSteps เพิ่มข้อมูลแบบกลับด้านเองหลังแบ่งชุดตรวจสอบ
+console.log("เพิ่มข้อมูลแบบกลับด้านเฉพาะชุดเทรน (ชุดตรวจสอบต้องไม่ถูกปนเปื้อน)\n");
 
 const model = new Classifier(labels, FEATURE_DIMS, 64);
 const startedAt = Date.now();
 let epochsRun = 0;
 
-for (const progress of model.trainSteps(augmentedX, augmentedY, { epochs: 120, patience: 20 })) {
+const trainOptions = { epochs: 120, patience: 20, augment: mirrorFeatureVector };
+
+for (const progress of model.trainSteps(X, y, trainOptions)) {
   epochsRun = progress.epoch;
   if (progress.epoch % 20 === 0 || progress.epoch === 1) {
     console.log(

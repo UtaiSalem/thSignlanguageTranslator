@@ -33,7 +33,7 @@ import config  # noqa: E402
 from . import drawing, thai_text  # noqa: E402
 from .collect import open_camera  # noqa: E402
 from .console import enable_utf8_output  # noqa: E402
-from .features import build_feature_vector  # noqa: E402
+from .features import build_canonical_feature_vector  # noqa: E402
 from .hand_tracker import HandTracker  # noqa: E402
 
 enable_utf8_output()
@@ -122,11 +122,15 @@ def load_classifier():
 
 
 def predict(model, labels: list[str], hands):
-    """ทายท่ามือของเฟรมนี้ คืน (คำที่ทาย, ความมั่นใจ, ความน่าจะเป็นทุกคำ)"""
+    """ทายท่ามือของเฟรมนี้ คืน (คำที่ทาย, ความมั่นใจ, ความน่าจะเป็นทุกคำ)
+
+    ต้องแปลงเป็นคอนเวนชันกลางแบบเดียวกับตอนเก็บข้อมูลเสมอ ไม่งั้นโมเดลจะเจอ
+    เวกเตอร์ที่กลับด้านจากที่เคยเรียนมา
+    """
     if not hands:
         return None, 0.0, None
 
-    vector = build_feature_vector(hands).reshape(1, -1)
+    vector = build_canonical_feature_vector(hands, config.MIRROR_PREVIEW).reshape(1, -1)
     probabilities = model.predict_proba(vector)[0]
     best = int(np.argmax(probabilities))
     return labels[best], float(probabilities[best]), probabilities

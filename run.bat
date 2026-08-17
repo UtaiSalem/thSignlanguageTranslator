@@ -18,6 +18,7 @@ REM     run parity       verify Python and JavaScript compute identical features
 REM     run jstest       test the JavaScript model (needs Node.js)
 REM     run icons        regenerate the mobile app icons
 REM     run transfer export / import   move datasets between desktop and phone
+REM     run transfer convert-legacy    convert a pre-canonical dataset in place
 REM
 REM Extra arguments are passed through, e.g.  run train --model rf
 

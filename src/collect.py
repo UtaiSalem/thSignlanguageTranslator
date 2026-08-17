@@ -26,7 +26,7 @@ import config  # noqa: E402
 
 from . import dataset, drawing, thai_text  # noqa: E402
 from .console import enable_utf8_output  # noqa: E402
-from .features import build_feature_vector  # noqa: E402
+from .features import build_canonical_feature_vector  # noqa: E402
 from .hand_tracker import HandTracker  # noqa: E402
 
 enable_utf8_output()
@@ -107,8 +107,10 @@ def main() -> int:
                     break
 
                 # พลิกภาพก่อนตรวจจับ เพื่อให้พิกัดที่ได้ตรงกับภาพที่เห็นบนจอ
-                # (ผลข้างเคียง: MediaPipe จะเรียกมือขวาจริงว่า "Left" แต่ไม่เป็นไร
-                #  เพราะทั้งตอนเก็บข้อมูลและตอนแปลผลใช้มาตรฐานเดียวกัน)
+                # ผลข้างเคียง: MediaPipe จะเรียกมือขวาจริงว่า "Left" และแกน x กลับด้าน
+                # จึงต้องแปลงเวกเตอร์กลับเป็นคอนเวนชันกลางด้วย
+                # build_canonical_feature_vector ก่อนบันทึก ไม่งั้นข้อมูลชุดนี้จะ
+                # ใช้ร่วมกับข้อมูลจากแอปมือถือไม่ได้ (ดู src/features.py)
                 if config.MIRROR_PREVIEW:
                     frame = cv2.flip(frame, 1)
 
@@ -120,7 +122,11 @@ def main() -> int:
 
                 # เก็บอัตโนมัติในโหมดต่อเนื่อง
                 if burst and hands and now - last_capture >= config.BURST_INTERVAL_SEC:
-                    dataset.append_sample(config.DATASET_CSV, label, build_feature_vector(hands))
+                    dataset.append_sample(
+                        config.DATASET_CSV,
+                        label,
+                        build_canonical_feature_vector(hands, config.MIRROR_PREVIEW),
+                    )
                     counts[label] += 1
                     last_capture = now
                     flash_until = now + 0.06
@@ -140,7 +146,9 @@ def main() -> int:
                 elif key == ord(" "):
                     if hands:
                         dataset.append_sample(
-                            config.DATASET_CSV, label, build_feature_vector(hands)
+                            config.DATASET_CSV,
+                            label,
+                            build_canonical_feature_vector(hands, config.MIRROR_PREVIEW),
                         )
                         counts[label] += 1
                         flash_until = now + 0.12
