@@ -30,8 +30,11 @@ from sklearn.preprocessing import StandardScaler
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import config  # noqa: E402
 
+from .console import enable_utf8_output  # noqa: E402
 from .dataset import load_dataset  # noqa: E402
 from .features import mirror_feature_vector  # noqa: E402
+
+enable_utf8_output()
 
 MIN_SAMPLES_PER_CLASS = 10
 

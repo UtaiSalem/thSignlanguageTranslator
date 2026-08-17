@@ -25,8 +25,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import config  # noqa: E402
 
 from . import dataset, drawing, thai_text  # noqa: E402
+from .console import enable_utf8_output  # noqa: E402
 from .features import build_feature_vector  # noqa: E402
 from .hand_tracker import HandTracker  # noqa: E402
+
+enable_utf8_output()
 
 
 def open_camera() -> cv2.VideoCapture:

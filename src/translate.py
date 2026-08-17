@@ -32,8 +32,11 @@ import config  # noqa: E402
 
 from . import drawing, thai_text  # noqa: E402
 from .collect import open_camera  # noqa: E402
+from .console import enable_utf8_output  # noqa: E402
 from .features import build_feature_vector  # noqa: E402
 from .hand_tracker import HandTracker  # noqa: E402
+
+enable_utf8_output()
 
 
 class SentenceBuilder:

@@ -1,0 +1,462 @@
+/* ออกแบบสำหรับมือถือเป็นหลัก โทนมืดเพื่อให้ภาพจากกล้องเด่นและถนอมสายตา */
+
+:root {
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --surface-2: #334155;
+  --border: #475569;
+  --text: #f1f5f9;
+  --muted: #94a3b8;
+  --accent: #38bdf8;
+  --ok: #22c55e;
+  --warn: #fbbf24;
+  --danger: #f87171;
+  --radius: 14px;
+  --tabbar-height: 62px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Leelawadee UI", "Noto Sans Thai", "Sarabun", system-ui, -apple-system, sans-serif;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
+}
+
+body { overflow: hidden; }
+
+/* ------------------------------------------------------------ หน้าจอโหลด */
+
+.loading {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  text-align: center;
+}
+
+.loading__mark { font-size: 64px; }
+.loading__title { margin: 0; font-size: 24px; font-weight: 700; }
+.loading__text { margin: 0; color: var(--muted); font-size: 15px; min-height: 22px; }
+
+.loading__spinner {
+  width: 34px;
+  height: 34px;
+  border: 3px solid var(--surface-2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* --------------------------------------------------------- โครงหน้าจอหลัก */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ------------------------------------------------------------ ภาพจากกล้อง */
+
+.viewport {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  max-height: 52dvh;
+  background: #000;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.viewport video,
+.viewport canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* กล้องหน้าต้องแสดงแบบกระจกเงา ไม่งั้นผู้ใช้จะขยับมือผิดทางโดยสัญชาตญาณ
+   ต้องพลิกทั้งวิดีโอและ canvas พร้อมกัน โครงมือที่วาดถึงจะทับตรงตำแหน่ง */
+.viewport[data-mirrored="yes"] video,
+.viewport[data-mirrored="yes"] canvas {
+  transform: scaleX(-1);
+}
+
+.viewport--flash { outline: 4px solid var(--ok); outline-offset: -4px; }
+
+.viewport__topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px;
+  padding-top: max(10px, env(safe-area-inset-top));
+}
+
+.pill {
+  background: rgba(15, 23, 42, 0.72);
+  color: var(--text);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+  padding: 7px 13px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+
+/* ปุ่มที่กดได้ต้องสูงอย่างน้อย 44px ตามเกณฑ์พื้นที่สัมผัสขั้นต่ำบนมือถือ */
+button.pill { min-height: 44px; display: inline-flex; align-items: center; }
+
+.pill--muted { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------------------ ป้ายผลการแปลบนภาพ */
+
+.translate-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 12px 14px 14px;
+  background: linear-gradient(to top, rgba(15, 23, 42, 0.92), transparent);
+  display: none;
+}
+
+/* แสดงเฉพาะตอนอยู่ในโหมดแปลเท่านั้น */
+.viewport[data-mode="translate"] .translate-overlay { display: block; }
+
+.predicted {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
+}
+
+.predicted[data-state="idle"] { font-size: 22px; color: var(--muted); font-weight: 500; }
+.predicted[data-state="unsure"] { color: var(--warn); }
+.predicted[data-state="sure"] { color: var(--ok); }
+
+.predicted__confidence { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+.stability {
+  height: 5px;
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 999px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.stability i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 60ms linear;
+}
+
+.top-predictions { margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
+
+.prediction { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+.prediction--top { color: var(--text); font-weight: 600; }
+.prediction__label { min-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.prediction__bar {
+  flex: 1;
+  height: 6px;
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.prediction__bar i { display: block; height: 100%; background: var(--muted); }
+.prediction--top .prediction__bar i { background: var(--ok); }
+
+/* ------------------------------------------------------------- เนื้อหาแผง */
+
+.panels {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 14px 14px 20px;
+}
+
+.panel { display: flex; flex-direction: column; gap: 12px; }
+
+.section-title {
+  margin: 8px 0 0;
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.section-title__meta { font-size: 13px; font-weight: 400; color: var(--muted); }
+
+.hint { margin: 0; font-size: 13px; line-height: 1.65; color: var(--muted); }
+.hint--warn { color: var(--warn); }
+.hint--privacy { border-top: 1px solid var(--surface-2); padding-top: 12px; margin-top: 4px; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--surface-2);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.card p { margin: 0 0 6px; font-size: 14px; }
+.card p:last-child { margin-bottom: 0; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px !important; }
+
+.chip {
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+/* ------------------------------------------------------------- ช่องกรอก */
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field__label { font-size: 14px; font-weight: 600; }
+
+.field__input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  padding: 13px 14px;
+  font-size: 17px; /* 16px ขึ้นไป กัน iOS ซูมเข้าอัตโนมัติตอนกดช่องกรอก */
+  font-family: inherit;
+  width: 100%;
+}
+
+.field__input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.statusline {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.statusline [data-ok="yes"] { color: var(--ok); }
+.statusline [data-ok="no"] { color: var(--warn); }
+
+/* --------------------------------------------------------------- ปุ่ม */
+
+.buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.button {
+  flex: 1;
+  min-width: 104px;
+  min-height: 48px; /* พื้นที่กดขั้นต่ำที่นิ้วกดได้สบาย */
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 15px;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 12px 14px;
+}
+
+.button:active { transform: scale(0.98); }
+.button:disabled { opacity: 0.5; cursor: default; }
+.button--wide { flex: 1 0 100%; }
+.button--primary { background: var(--accent); border-color: var(--accent); color: #06283d; }
+.button--ghost { background: transparent; color: var(--muted); }
+.button--danger { background: transparent; border-color: var(--danger); color: var(--danger); }
+.button[data-active="yes"] { background: var(--ok); border-color: var(--ok); color: #052e16; }
+
+/* ------------------------------------------------------- รายการคำที่บันทึก */
+
+.label-list { display: flex; flex-direction: column; gap: 6px; }
+
+.label-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--surface-2);
+  border-radius: var(--radius);
+  padding: 6px 10px 6px 4px;
+}
+
+.label-row--active { border-color: var(--accent); }
+
+.label-row__name {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 16px;
+  text-align: left;
+  padding: 10px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.label-row__count {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  border-radius: 999px;
+  padding: 3px 10px;
+  background: var(--surface-2);
+}
+
+.label-row__count[data-level="good"] { background: rgba(34, 197, 94, 0.22); color: var(--ok); }
+.label-row__count[data-level="ok"] { background: rgba(251, 191, 36, 0.2); color: var(--warn); }
+.label-row__count[data-level="low"] { background: rgba(248, 113, 113, 0.18); color: var(--danger); }
+
+.label-row__delete {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 10px 8px;
+  cursor: pointer;
+}
+
+/* ------------------------------------------------------------ การเทรน */
+
+.train-progress { display: flex; flex-direction: column; gap: 8px; }
+
+.train-progress__track {
+  height: 8px;
+  background: var(--surface-2);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.train-progress__track i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 120ms linear;
+}
+
+.slider { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.slider b { color: var(--accent); font-variant-numeric: tabular-nums; }
+.slider input[type="range"] { width: 100%; accent-color: var(--accent); height: 30px; }
+
+.checkbox { display: flex; align-items: center; gap: 10px; font-size: 14px; padding: 6px 0; }
+.checkbox input { width: 22px; height: 22px; accent-color: var(--accent); }
+
+/* --------------------------------------------------------- กล่องข้อความ */
+
+.sentence-box {
+  background: var(--surface);
+  border: 1px solid var(--surface-2);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  min-height: 108px;
+}
+
+.sentence-box__title { font-size: 12px; color: var(--muted); }
+
+.sentence {
+  margin: 6px 0 0;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.sentence[data-empty="yes"] { color: var(--muted); font-weight: 400; }
+
+/* ------------------------------------------------------------ แถบแท็บล่าง */
+
+.tabs {
+  display: flex;
+  border-top: 1px solid var(--surface-2);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
+.tab {
+  flex: 1;
+  min-height: var(--tabbar-height);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 8px 4px;
+}
+
+.tab__icon { font-size: 21px; line-height: 1; }
+.tab[data-active="yes"] { color: var(--accent); }
+
+/* ------------------------------------------------------------ ข้อความแจ้ง */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--tabbar-height) + 18px + env(safe-area-inset-bottom));
+  transform: translate(-50%, 14px);
+  max-width: min(92vw, 460px);
+  background: var(--surface-2);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease, transform 180ms ease;
+  z-index: 50;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.45);
+}
+
+.toast--visible { opacity: 1; transform: translate(-50%, 0); }
+.toast--ok { background: #14532d; }
+.toast--warn { background: #78350f; }
+.toast--error { background: #7f1d1d; }
+
+/* ------------------------------------------------- จอกว้าง (แท็บเล็ต/เดสก์ท็อป) */
+
+@media (min-width: 720px) and (min-height: 640px) {
+  .app { flex-direction: row; flex-wrap: wrap; max-width: 1100px; margin: 0 auto; }
+  .viewport { flex: 1 1 440px; max-height: 100dvh; aspect-ratio: 4 / 3; align-self: flex-start; }
+  .panels { flex: 1 1 380px; max-height: 100dvh; }
+  .tabs { flex: 1 0 100%; order: 3; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

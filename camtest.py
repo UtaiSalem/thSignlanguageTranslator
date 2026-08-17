@@ -21,7 +21,10 @@ import config  # noqa: E402
 
 from src import drawing  # noqa: E402
 from src.collect import open_camera  # noqa: E402
+from src.console import enable_utf8_output  # noqa: E402
 from src.hand_tracker import HandTracker  # noqa: E402
+
+enable_utf8_output()
 
 
 def main() -> int:

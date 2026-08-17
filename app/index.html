@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#0f172a">
+<meta name="description" content="แอปแปลภาษามือไทยเป็นข้อความ ทำงานบนเครื่องทั้งหมด ไม่ส่งข้อมูลออกนอกเครื่อง">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ภาษามือไทย">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<link rel="icon" href="./icons/icon-192.png">
+<link rel="stylesheet" href="./css/style.css">
+<title>แปลภาษามือไทย</title>
+</head>
+<body>
+
+<div id="loading" class="loading">
+  <div class="loading__mark">🤟</div>
+  <h1 class="loading__title">แปลภาษามือไทย</h1>
+  <p id="loadingText" class="loading__text">กำลังเริ่มต้น ...</p>
+  <div class="loading__spinner"></div>
+</div>
+
+<div id="app" class="app" hidden>
+
+  <!-- ภาพจากกล้องพร้อมโครงมือที่วาดทับ ใช้ร่วมกันทั้งโหมดบันทึกและโหมดแปล -->
+  <div id="viewport" class="viewport" data-mirrored="yes">
+    <video id="video" playsinline muted autoplay></video>
+    <canvas id="overlay"></canvas>
+
+    <div class="viewport__topbar">
+      <button id="switchCameraButton" class="pill" type="button">
+        สลับกล้อง · <span id="cameraLabel">กล้องหน้า</span>
+      </button>
+      <span id="fpsLabel" class="pill pill--muted">0 FPS</span>
+    </div>
+
+    <!-- ป้ายผลการแปล แสดงเฉพาะโหมดแปล -->
+    <div id="translateOverlay" class="translate-overlay">
+      <div id="predictedWord" class="predicted" data-state="idle">ยกมือเข้ามาในกรอบ</div>
+      <div id="predictedConfidence" class="predicted__confidence"></div>
+      <div class="stability"><i id="stabilityBar"></i></div>
+      <div id="topPredictions" class="top-predictions"></div>
+    </div>
+  </div>
+
+  <main class="panels">
+
+    <!-- ============================================ โหมดบันทึกข้อมูล -->
+    <section id="panel-collect" class="panel">
+      <label class="field">
+        <span class="field__label">ท่านี้แปลว่าอะไร</span>
+        <input id="labelInput" class="field__input" type="text" inputmode="text"
+               placeholder="เช่น สวัสดี, ขอบคุณ, ก, ข" autocomplete="off">
+      </label>
+
+      <div class="statusline">
+        <span id="collectHandInfo" data-ok="no">ยกมือเข้ามาในกรอบ</span>
+        <span id="collectCount">ยังไม่ได้ตั้งชื่อท่า</span>
+      </div>
+
+      <div class="buttons">
+        <button id="captureButton" class="button button--primary" type="button">เก็บ 1 ตัวอย่าง</button>
+        <button id="burstButton" class="button" type="button" data-active="no">เก็บต่อเนื่อง</button>
+        <button id="undoButton" class="button button--ghost" type="button">ลบล่าสุด</button>
+      </div>
+
+      <p class="hint">
+        เคล็ดลับ: ระหว่างเก็บต่อเนื่อง ให้ค่อย ๆ หมุนข้อมือ เอียงมือ ขยับเข้า-ออกจากกล้อง
+        และย้ายมือไปมุมต่าง ๆ ของจอ ถ้าเก็บภาพนิ่งสนิท โมเดลจะรู้จักท่านั้นแค่มุมเดียว
+        แนะนำคำละ 150 ตัวอย่างขึ้นไป
+      </p>
+
+      <h2 class="section-title">คำที่บันทึกไว้ <span id="datasetSummary" class="section-title__meta"></span></h2>
+      <div id="labelList" class="label-list"></div>
+    </section>
+
+    <!-- ============================================ โหมดเทรนโมเดล -->
+    <section id="panel-train" class="panel" hidden>
+      <h2 class="section-title">เทรนโมเดล</h2>
+      <p class="hint">
+        เทรนบนเครื่องนี้ทั้งหมด ใช้เวลาไม่กี่วินาที ทุกครั้งที่เก็บข้อมูลเพิ่มควรเทรนใหม่
+      </p>
+
+      <button id="trainButton" class="button button--primary button--wide" type="button">
+        เริ่มเทรน
+      </button>
+
+      <div id="trainProgress" class="train-progress" hidden>
+        <div class="train-progress__track"><i id="trainBar"></i></div>
+        <p id="trainStat" class="hint"></p>
+      </div>
+
+      <div id="modelInfo" class="card"></div>
+
+      <h2 class="section-title">ตั้งค่าการแปล</h2>
+
+      <label class="slider">
+        <span>เกณฑ์ความมั่นใจ <b id="settingConfidenceValue">75%</b></span>
+        <input id="settingConfidence" type="range" min="40" max="99" step="1" value="75">
+        <span class="hint">สูงขึ้น = ทายผิดน้อยลง แต่ต้องทำท่าให้ชัดขึ้น</span>
+      </label>
+
+      <label class="slider">
+        <span>ต้องนิ่งกี่เฟรม <b id="settingStabilityValue">8 เฟรม</b></span>
+        <input id="settingStability" type="range" min="3" max="20" step="1" value="8">
+        <span class="hint">มากขึ้น = ไม่รับคำมั่ว แต่ต้องค้างท่านานขึ้น</span>
+      </label>
+
+      <label class="slider">
+        <span>ช่วงพักก่อนรับคำซ้ำ <b id="settingCooldownValue">1.0 วินาที</b></span>
+        <input id="settingCooldown" type="range" min="300" max="3000" step="100" value="1000">
+        <span class="hint">กันคำเดียวถูกนับหลายรอบ</span>
+      </label>
+
+      <h2 class="section-title">ข้อมูล</h2>
+      <p class="hint">
+        ส่งออกเป็นไฟล์ JSON เพื่อสำรองไว้ หรือย้ายไปเทรนบนคอมพิวเตอร์
+        และนำเข้าข้อมูลที่เก็บจากคอมพิวเตอร์มาใช้บนมือถือได้เช่นกัน
+      </p>
+      <div class="buttons">
+        <button id="exportButton" class="button" type="button">ส่งออกข้อมูล</button>
+        <button id="importButton" class="button" type="button">นำเข้าข้อมูล</button>
+        <button id="clearButton" class="button button--danger" type="button">ล้างทั้งหมด</button>
+      </div>
+
+      <p class="hint hint--privacy">
+        ข้อมูลทั้งหมดถูกเก็บไว้ในเครื่องนี้เท่านั้น ไม่มีการส่งภาพหรือข้อมูลใด ๆ
+        ออกไปที่เซิร์ฟเวอร์ และแอปทำงานได้แม้ปิดอินเทอร์เน็ต
+      </p>
+    </section>
+
+    <!-- ============================================ โหมดแปล -->
+    <section id="panel-translate" class="panel" hidden>
+      <p id="translateHint" class="hint hint--warn" hidden>
+        ยังไม่มีโมเดล — ไปที่แท็บ "เทรน" แล้วกดเริ่มเทรนก่อน
+      </p>
+
+      <div class="sentence-box">
+        <span class="sentence-box__title">ข้อความที่แปลได้</span>
+        <p id="sentence" class="sentence" data-empty="yes">—</p>
+      </div>
+
+      <div class="buttons">
+        <button id="spaceButton" class="button" type="button">เว้นวรรค</button>
+        <button id="backspaceButton" class="button" type="button">ลบคำ</button>
+        <button id="clearSentenceButton" class="button button--ghost" type="button">ล้าง</button>
+      </div>
+      <div class="buttons">
+        <button id="copyButton" class="button" type="button">คัดลอก</button>
+        <button id="speakButton" class="button" type="button">อ่านออกเสียง</button>
+      </div>
+
+      <label class="checkbox">
+        <input id="speakToggle" type="checkbox">
+        <span>อ่านออกเสียงทันทีที่แปลได้แต่ละคำ</span>
+      </label>
+    </section>
+
+  </main>
+
+  <nav class="tabs">
+    <button id="tab-collect" class="tab" type="button" data-active="yes">
+      <span class="tab__icon">✋</span><span>บันทึก</span>
+    </button>
+    <button id="tab-train" class="tab" type="button" data-active="no">
+      <span class="tab__icon">⚙️</span><span>เทรน</span>
+    </button>
+    <button id="tab-translate" class="tab" type="button" data-active="no">
+      <span class="tab__icon">💬</span><span>แปล</span>
+    </button>
+  </nav>
+
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script type="module" src="./js/app.js"></script>
+<script>
+  // ลงทะเบียน service worker เพื่อให้แอปทำงานแบบออฟไลน์และติดตั้งลงหน้าจอหลักได้
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./sw.js").catch((error) => {
+        console.warn("ลงทะเบียน service worker ไม่สำเร็จ", error);
+      });
+    });
+  }
+</script>
+
+</body>
+</html>

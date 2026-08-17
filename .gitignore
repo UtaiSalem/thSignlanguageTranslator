@@ -2,12 +2,14 @@
 __pycache__/
 *.pyc
 
-# ไฟล์โมเดลตรวจจับมือ ดาวน์โหลดใหม่อัตโนมัติได้ ไม่ต้องเก็บลง git
-models/hand_landmarker.task
+# หมายเหตุ: ทุก pattern ด้านล่างต้องขึ้นต้นด้วย / เพื่อยึดกับรากของ repo
+# ถ้าเขียน models/... เฉย ๆ git จะมองว่าตรงกับโฟลเดอร์ชื่อนี้ในทุกระดับ
+# แล้วจะเผลอ ignore ไฟล์ใน app/models/ ซึ่งจำเป็นต้องขึ้น git เพื่อให้ GitHub Pages เสิร์ฟได้
+
+# ไฟล์โมเดลตรวจจับมือฝั่งคอมพิวเตอร์ ดาวน์โหลดใหม่อัตโนมัติได้
+/models/hand_landmarker.task
 
 # ผลลัพธ์ที่สร้างขึ้นระหว่างใช้งาน
-models/classifier.joblib
-data/landmarks.csv
-data/transcripts.txt
-data/camtest_snapshot.jpg
-docs/training_report.txt
+/models/classifier.joblib
+/data/
+/docs/training_report.txt

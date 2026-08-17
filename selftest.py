@@ -18,6 +18,9 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import config  # noqa: E402
+from src.console import enable_utf8_output  # noqa: E402
+
+enable_utf8_output()
 
 PASSED: list[str] = []
 FAILED: list[tuple[str, str]] = []
